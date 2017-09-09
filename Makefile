@@ -1,4 +1,12 @@
+.PHONY: all
 all: kvmsample test.bin
+
+.PHONY: clean
+clean:
+	@rm -f kvmsample;
+	@rm -f test.bin;
+	@rm -f test.o;
+	@rm -f main.o;
 
 kvmsample: main.o
 	gcc main.c -o kvmsample -lpthread
