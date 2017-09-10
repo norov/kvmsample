@@ -1,3 +1,9 @@
+CROSS_COMPILE=
+#ARCH=arm64
+ARCH=i386
+
+CFLAGS := -D _ARCH=$(ARCH) -I./ -I./$(ARCH)/include/ -lpthread
+
 .PHONY: all
 all: kvmsample test.bin
 
@@ -8,12 +14,7 @@ clean:
 	@rm -f test.o;
 	@rm -f main.o;
 
-kvmsample: main.o
-	$(CROSS_COMPILE)gcc main.c -o kvmsample -lpthread
+kvmsample: main.o $(ARCH)/kvm_init.o
+	$(CROSS_COMPILE)gcc main.c $(CFLAGS) $(ARCH)/kvm_init.c -o kvmsample
 
-test.bin: test.o
-	$(CROSS_COMPILE)ld -m elf_i386 --oformat binary -N -e _start -Ttext 0x10000 -o test.bin test.o
-
-test.o: test.S
-	$(CROSS_COMPILE)as -32 test.S -o test.o
-	
+include $(ARCH)/Makefile.include

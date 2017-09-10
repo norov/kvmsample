@@ -12,68 +12,23 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <kvm_init.h>
 
 #define KVM_DEVICE "/dev/kvm"
 #define RAM_SIZE 512000000
-#define CODE_START 0x1000
+
 #define BINARY_FILE "test.bin"
 
 struct kvm {
-   int dev_fd;	
+   int dev_fd;
    int vm_fd;
-   __u64 ram_size;
    __u64 ram_start;
-   int kvm_version;
+   __u64 ram_size;
    struct kvm_userspace_memory_region mem;
 
    struct vcpu *vcpus;
    int vcpu_number;
 };
-
-struct vcpu {
-    int vcpu_id;
-    int vcpu_fd;
-    pthread_t vcpu_thread;
-    struct kvm_run *kvm_run;
-    int kvm_run_mmap_size;
-    struct kvm_regs regs;
-    struct kvm_sregs sregs;
-    void *(*vcpu_thread_func)(void *);
-};
-
-void kvm_reset_vcpu (struct vcpu *vcpu) {
-	if (ioctl(vcpu->vcpu_fd, KVM_GET_SREGS, &(vcpu->sregs)) < 0) {
-		perror("can not get sregs\n");
-		exit(1);
-	}
-
-	vcpu->sregs.cs.selector = CODE_START;
-	vcpu->sregs.cs.base = CODE_START * 16;
-	vcpu->sregs.ss.selector = CODE_START;
-	vcpu->sregs.ss.base = CODE_START * 16;
-	vcpu->sregs.ds.selector = CODE_START;
-	vcpu->sregs.ds.base = CODE_START *16;
-	vcpu->sregs.es.selector = CODE_START;
-	vcpu->sregs.es.base = CODE_START * 16;
-	vcpu->sregs.fs.selector = CODE_START;
-	vcpu->sregs.fs.base = CODE_START * 16;
-	vcpu->sregs.gs.selector = CODE_START;
-
-	if (ioctl(vcpu->vcpu_fd, KVM_SET_SREGS, &vcpu->sregs) < 0) {
-		perror("can not set sregs");
-		exit(1);
-	}
-
-	vcpu->regs.rflags = 0x0000000000000002ULL;
-	vcpu->regs.rip = 0;
-	vcpu->regs.rsp = 0xffffffff;
-	vcpu->regs.rbp= 0;
-
-	if (ioctl(vcpu->vcpu_fd, KVM_SET_REGS, &(vcpu->regs)) < 0) {
-		perror("KVM SET REGS\n");
-		exit(1);
-	}
-}
 
 void *kvm_cpu_thread(void *data) {
 	struct kvm *kvm = (struct kvm *)data;
@@ -83,45 +38,15 @@ void *kvm_cpu_thread(void *data) {
 	while (1) {
 		printf("KVM start run\n");
 		ret = ioctl(kvm->vcpus->vcpu_fd, KVM_RUN, 0);
-	
+
 		if (ret < 0) {
 			fprintf(stderr, "KVM_RUN failed\n");
 			exit(1);
 		}
 
-		switch (kvm->vcpus->kvm_run->exit_reason) {
-		case KVM_EXIT_UNKNOWN:
-			printf("KVM_EXIT_UNKNOWN\n");
-			break;
-		case KVM_EXIT_DEBUG:
-			printf("KVM_EXIT_DEBUG\n");
-			break;
-		case KVM_EXIT_IO:
-			printf("KVM_EXIT_IO\n");
-			printf("out port: %d, data: %d\n", 
-				kvm->vcpus->kvm_run->io.port,  
-				*(int *)((char *)(kvm->vcpus->kvm_run) + kvm->vcpus->kvm_run->io.data_offset)
-				);
-			sleep(1);
-			break;
-		case KVM_EXIT_MMIO:
-			printf("KVM_EXIT_MMIO\n");
-			break;
-		case KVM_EXIT_INTR:
-			printf("KVM_EXIT_INTR\n");
-			break;
-		case KVM_EXIT_SHUTDOWN:
-			printf("KVM_EXIT_SHUTDOWN\n");
-			goto exit_kvm;
-			break;
-		default:
-			printf("KVM PANIC\n");
-			goto exit_kvm;
-		}
+		if (kvm_handle_exit(kvm->vcpus))
+			return 0;
 	}
-
-exit_kvm:
-	return 0;
 }
 
 void load_binary(struct kvm *kvm) {
@@ -154,8 +79,6 @@ struct kvm *kvm_init(void) {
         return NULL;
     }
 
-    kvm->kvm_version = ioctl(kvm->dev_fd, KVM_GET_API_VERSION, 0);
-
     return kvm;
 }
 
@@ -175,15 +98,15 @@ int kvm_create_vm(struct kvm *kvm, int ram_size) {
     }
 
     kvm->ram_size = ram_size;
-    kvm->ram_start =  (__u64)mmap(NULL, kvm->ram_size, 
-                PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, 
+    kvm->ram_start =  (__u64)mmap(NULL, kvm->ram_size,
+                PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
                 -1, 0);
 
     if ((void *)kvm->ram_start == MAP_FAILED) {
         perror("can not mmap ram");
         return -1;
     }
-    
+
     kvm->mem.slot = 0;
     kvm->mem.guest_phys_addr = 0;
     kvm->mem.memory_size = kvm->ram_size;
