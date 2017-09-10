@@ -1,0 +1,7 @@
+kvmsample
+main.o
+test.bin
+test.o
+arm64/kvm_init.o
+i386/kvm_init.o
+
