@@ -1,6 +1,8 @@
-CROSS_COMPILE=
-#ARCH=arm64
-ARCH=i386
+CROSS_COMPILE?=/home/yury/work/gcc-linaro-6.3.1-2017.02-i686_aarch64-linux-gnu/bin/aarch64-linux-gnu-
+ARCH?=arm64
+
+#CROSS_COMPILE=
+#ARCH=i386
 
 CFLAGS := -D _ARCH=$(ARCH) -I./ -I./$(ARCH)/include/ -lpthread
 

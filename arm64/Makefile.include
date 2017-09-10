@@ -1,0 +1,6 @@
+test.bin: test.o
+	$(CROSS_COMPILE)ld -N -e start -Ttext 0x80000 -o test.bin test.o
+
+test.o: arm64/test.S
+	$(CROSS_COMPILE)as arm64/test.S -o test.o
+	
